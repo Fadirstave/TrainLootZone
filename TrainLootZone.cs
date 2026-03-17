@@ -10,13 +10,14 @@ namespace Oxide.Plugins
         private StorageContainer stationBarrel;
 
         // Zone positions
-        private readonly Vector3 DomePos = new Vector3(1094.18f, 8.80f, -482.90f);
-        private readonly Vector3 BarrelPos = new Vector3(1085.41f, 8.72f, -486.42f);
+        private readonly Vector3 DomePos = new Vector3(-1184.99f, 21.91f, -606.36f);
+        private readonly Vector3 BarrelPos = new Vector3(-1175.78f, 21.76f, -602.06f);
         private const float DomeRadius = 18f;
 
         // Prefabs
         private const string SpherePrefab = "assets/bundled/prefabs/modding/events/twitch/br_sphere.prefab";
         private const string BarrelPrefab = "assets/prefabs/misc/decor_dlc/storagebarrel/storage_barrel_b.prefab";
+        private const string TrainWagonLootPrefab = "trainwagonunloadableloot.entity";
 
         // Internal state
         private readonly Dictionary<BaseEntity, Vector3> wagonLastPos = new();
@@ -157,6 +158,7 @@ namespace Oxide.Plugins
                 {
                     stationBarrel = sc;
                     sc.pickup.enabled = false;
+                    ConfigureStationBarrel();
                     return;
                 }
             }
@@ -167,6 +169,19 @@ namespace Oxide.Plugins
 
             stationBarrel = b as StorageContainer;
             stationBarrel.pickup.enabled = false;
+            ConfigureStationBarrel();
+        }
+
+        private void ConfigureStationBarrel()
+        {
+            if (stationBarrel == null) return;
+
+            stationBarrel.inventory?.Clear();
+            if (stationBarrel is LootContainer lootContainer)
+            {
+                lootContainer.lootDefinition = null;
+                lootContainer.CancelInvoke("SpawnLoot");
+            }
         }
 
         object OnEntityTakeDamage(BaseCombatEntity e, HitInfo info)
@@ -333,13 +348,20 @@ namespace Oxide.Plugins
 
         private void TransferLoot(BaseEntity wagon)
         {
-            StorageContainer loot = wagon.GetComponentInChildren<StorageContainer>();
-            if (loot == null || stationBarrel == null) return;
+            if (wagon == null || stationBarrel == null || stationBarrel.inventory == null) return;
 
-            foreach (var item in new List<Item>(loot.inventory.itemList))
-                item.MoveToContainer(stationBarrel.inventory);
+            var containers = wagon.GetComponentsInChildren<StorageContainer>(true);
+            if (containers == null || containers.Length == 0) return;
 
-            loot.inventory.Clear();
+            foreach (var container in containers)
+            {
+                if (container == null || container.inventory == null) continue;
+                if (ReferenceEquals(container, stationBarrel)) continue;
+                if (container.ShortPrefabName == TrainWagonLootPrefab) continue;
+
+                foreach (var item in new List<Item>(container.inventory.itemList))
+                    item.MoveToContainer(stationBarrel.inventory, -1, true);
+            }
         }
 
         private void ResetWagon(BaseEntity wagon)
